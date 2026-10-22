@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+      - name: compiler
+        run: ${{ matrix.cc }} --version | head -1
+      - name: build (warnings are fatal)
+        run: ${{ matrix.cc }} -std=c11 -O2 -Wall -Wextra -Werror -o cpflow src/cpflow.c
+      - name: smoke tests
+        run: sh tests/smoke.sh ./cpflow
+      - name: static build
+        run: |
+          ${{ matrix.cc }} -std=c11 -O2 -static -s -o cpflow-static src/cpflow.c
+          file cpflow-static

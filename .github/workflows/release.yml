@@ -1,0 +1,101 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    name: linux (x86_64, aarch64, armv7)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: cross toolchains
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
+      - name: build
+        run: |
+          mkdir -p dist
+          gcc    -std=c11 -O2 -static -s -o dist/cpflow-linux-x86_64  src/cpflow.c
+          aarch64-linux-gnu-gcc   -std=c11 -O2 -static -s -o dist/cpflow-linux-aarch64 src/cpflow.c
+          arm-linux-gnueabihf-gcc -std=c11 -O2 -static -s -o dist/cpflow-linux-armv7   src/cpflow.c
+      - name: smoke tests (native)
+        run: sh tests/smoke.sh dist/cpflow-linux-x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-linux
+          path: dist/*
+          if-no-files-found: error
+
+  windows:
+    name: windows (x86_64)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc
+      - name: build
+        shell: msys2 {0}
+        run: |
+          mkdir -p dist
+          gcc -std=c11 -O2 -static -s -o dist/cpflow-windows-x86_64.exe src/cpflow.c
+          file dist/cpflow-windows-x86_64.exe || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-windows
+          path: dist/*
+          if-no-files-found: error
+
+  macos:
+    name: macos (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-13
+            arch: x86_64
+          - os: macos-14
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: build
+        run: |
+          mkdir -p dist
+          cc -std=c11 -O2 -Wall -Wextra -o dist/cpflow-macos-${{ matrix.arch }} src/cpflow.c
+      - name: smoke tests
+        run: sh tests/smoke.sh dist/cpflow-macos-${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-macos-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: publish
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: checksums
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS
+          ls -l
+          cat SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true

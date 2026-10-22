@@ -1,145 +1,132 @@
 # cpflow
 
-**Copy files with a scrolling file list and a progress bar that stays pinned at the bottom of your terminal.**
+**Copy files with a btop-style terminal UI: file names stream by, the progress bar stays pinned, and resizing the window never breaks the layout.**
 
-`cpflow` is a thin wrapper around `rsync`. You get the reliability of `rsync` (resumable, verifiable, no surprises) with an output that you can actually watch: every file name streams by, while one single progress bar sits at the bottom and never scrolls away.
+Single C file. No rsync, no Python, no runtime dependencies — one binary, run it.
 
 ```
-d-24.bin
-d-25.bin
-alt klasor/
-alt klasor/p-1.dat
-alt klasor/p-2.dat
-alt klasor/p-3.dat
-[#######################-----------------]  61%   11.4G  42.7MB/s   0:02:41  left:188/512
-alt klasor/p-3.dat
+╭─ cpflow v1.0.0 ────────────────────────────────────────────────00:01:23─╮
+│ /media/user/OLD  →  /media/user/NEW                                      │
+│ ██████████████████████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│  61%   11.4 GB / 18.6 GB   42.7 MB/s   eta 00:02:41                      │
+│                                                                          │
+│ ╭─ transfer ───────────────────────────╮ ╭─ speed ────────────────────╮  │
+│ │ done    11.4 GB                      │ │            ▁▂▃▅▇█▇▆▅▃▂▁     │  │
+│ │ files   324 / 512                    │ │ eta     00:02:41            │  │
+│ │ left    188                          │ │ peak    48.2 MB/s           │  │
+│ │ now     42.7 MB/s                    │ │ q / Esc / Ctrl-C  cancel    │  │
+│ ╰──────────────────────────────────────╯ ╰─────────────────────────────╯  │
+│ ╭─ current file ───────────────────────────────────────────────────────╮ │
+│ │ /media/user/OLD/media/clip-2026-10-22.mkv                            │ │
+│ ╰──────────────────────────────────────────────────────────────────────╯ │
+│ ╭─ files ──────────────────────────────────────────────────────────────╮ │
+│ │ media/clip-2026-10-21.mkv                                            │ │
+│ │ media/clip-2026-10-22.mkv                                            │ │
+│ ╰──────────────────────────────────────────────────────────────────────╯ │
+╰─ q quit ─────────────────────────────────────────────────────────────────╯
 ```
 
-<sub>That is the real layout, not a mock-up: the last two lines are reserved, everything above them scrolls.</sub>
+<sub>Rendered from an actual 100×30 capture of the program.</sub>
 
 ## Why
 
-`rsync --progress` cannot do this. It writes the percentage to the same line it later writes file names to (it returns to column 0 with `\r`), so names and numbers overwrite each other:
+`rsync --progress` cannot show a scrolling file list *and* a fixed progress bar: it writes the percentage to the same line it later writes file names to, so the two overwrite each other. Doing it properly needs a program that owns the screen.
 
-```
-f1.bin
-        32.77K   3%    0.00kB/s    0:00:00
-f2.bin                    <- lands on top of the line above
-```
-
-`--info=progress2` is not better: it gives you one global bar, but per-file names still collide with it. Terminals have no way to say "these two lines are mine, never scroll them" unless a program asks for it — so `cpflow` does: it sets a scroll region for the top of the screen and draws the bar below it.
-
-## Requirements
-
-- Linux or macOS (uses ANSI escape codes and `SIGWINCH`)
-- `rsync` 3.x in `PATH`
-- Python 3.7+ (standard library only, nothing to install)
+`cpflow` composes every frame into a cell grid and blits it with absolute cursor positions. There is no scroll region and no partial redraw, so a resize mid-copy just produces a correct frame at the new size.
 
 ## Install
 
+Download the binary for your platform from [Releases](../../releases) and put it in your `PATH`:
+
+```bash
+# Linux x86_64
+curl -L -o cpflow https://github.com/x3beche/cpflow/releases/latest/download/cpflow-linux-x86_64
+chmod +x cpflow && sudo mv cpflow /usr/local/bin/
+```
+
+| Platform | Asset |
+|---|---|
+| Linux x86_64 | `cpflow-linux-x86_64` |
+| Linux aarch64 (ARM64) | `cpflow-linux-aarch64` |
+| Linux armv7 (Raspberry Pi 32-bit) | `cpflow-linux-armv7` |
+| Windows x86_64 | `cpflow-windows-x86_64.exe` |
+| macOS Intel | `cpflow-macos-x86_64` |
+| macOS Apple Silicon | `cpflow-macos-arm64` |
+
+All Linux binaries are statically linked: no glibc version roulette, they run on any distro of the same architecture.
+
+### Build from source
+
 ```bash
 git clone https://github.com/x3beche/cpflow.git
-install -m 755 cpflow/cpflow.py ~/.local/bin/cpflow
+cd cpflow
+make            # or: make static
+sudo make install
 ```
 
-Or by hand — it is a single file with no dependencies:
-
-```bash
-cp cpflow.py ~/.local/bin/cpflow
-chmod +x ~/.local/bin/cpflow
-```
-
-Make sure `~/.local/bin` is in your `PATH`.
+Only a C11 compiler is required. `cc -std=c11 -O2 src/cpflow.c -o cpflow` is the whole build.
 
 ## Usage
 
-```bash
-cpflow SOURCE/ DEST/
 ```
-
-A trailing slash on `SOURCE` means "copy the contents", exactly like `rsync`. Leave it off and you get a `SOURCE` directory inside `DEST`.
-
-```
-cpflow 1.0.0 - copy with streaming file names and a pinned progress bar
-
-usage:
-  cpflow [options] SOURCE/ DEST/
-  cpflow [options] SOURCE/ DEST/ -- [extra rsync options]
+cpflow [options] SOURCE DEST
 
 options:
-  -n, --dry-run   show what would be copied, copy nothing
-  -h, --help      show this help
-  -V, --version   show version
+  -n, --dry-run         show what would be copied, copy nothing
+  --exclude=PATTERN     skip names matching PATTERN (* and ? work)
+  -h, --help            show this help
+  -V, --version         show version
+
+keys:
+  q, Esc, Ctrl-C        stop copying and exit
 ```
 
-### Examples
-
-Copy one USB disk onto another:
+The **contents** of `SOURCE` are copied into `DEST` (`cp -r SOURCE/. DEST/` semantics, not `cp -r SOURCE DEST/`).
 
 ```bash
-cpflow /media/user/OLD/ /media/user/NEW/
+cpflow /media/user/OLD /media/user/NEW                        # copy
+cpflow -n /media/user/OLD /media/user/NEW                     # preview
+cpflow --exclude=.Trash-1000 /media/user/OLD /media/user/NEW  # skip junk
 ```
 
-See what would happen first:
+### Resuming
+
+A file is skipped when the destination already has the same size and modification time (2 second tolerance, because exFAT and FAT store timestamps that coarsely). Kill a copy with `q` and run the same command again — finished files are skipped, the half-written one is copied again from the start.
+
+## Behaviour worth knowing
+
+- **Nothing is ever deleted.** No `--delete`, no cleanup of the destination.
+- Symlinks are recreated on POSIX; on Windows they are skipped (creating reparse points needs privileges).
+- Modification times are preserved. Permissions are not: files are created `0644` and directories `0777` minus your umask. Windows has no equivalent to copy.
+- Read/write errors are reported, the copy continues with the next file, and the exit code is `1` at the end.
+- Piped output (`cpflow a b > log`) skips the UI and prints plain lines instead.
+- Exit codes: `0` success, `1` finished with file errors, `2` bad arguments, `130` cancelled.
+
+## Safe order: copy, verify, delete
 
 ```bash
-cpflow -n /media/user/OLD/ /media/user/NEW/
-```
+cpflow /media/user/OLD /media/user/NEW
 
-Skip the trash folder and let `rsync` verbose-log:
+# verify: silent output means every file is identical
+rsync -rtnc --modify-window=2 /media/user/OLD/ /media/user/NEW/
 
-```bash
-cpflow /media/user/OLD/ /media/user/NEW/ -- --exclude=.Trash-1000
-```
-
-Resume an interrupted copy — just run the same command again:
-
-```bash
-cpflow /media/user/OLD/ /media/user/NEW/
-```
-
-## What it does with your terminal
-
-- The top `rows - 2` lines form a scroll region; file names appear there and push older ones off the screen.
-- The bottom two lines are reserved: the bar (percentage, bytes done, speed, elapsed, files left) and the name of the file currently being transferred.
-- Narrow terminals lose detail instead of wrapping: speed and ETA are dropped first, and under 25 columns only the percentage is shown.
-- Resizing the window re-lays out the scroll region (`SIGWINCH`).
-- `Ctrl-C` forwards `SIGINT` to the whole `rsync` process group, waits, escalates to `SIGKILL` if needed, and restores the terminal. No orphan `rsync` left behind.
-- If stdout is **not** a terminal (a pipe, a log file, cron), `cpflow` skips the UI entirely and `exec`s plain `rsync`, so `cpflow a/ b/ | tee copy.log` behaves sanely.
-
-## Safety
-
-`cpflow` copies. It never deletes anything, and it never passes `--delete` on your behalf.
-
-The safe order is always: **copy, verify, delete.**
-
-```bash
-cpflow /media/user/OLD/ /media/user/NEW/
-
-# empty output means every file is byte-identical
-rsync -rtn --checksum --modify-window=1 /media/user/OLD/ /media/user/NEW/
-
-# only after that is clean
+# only then
 find /media/user/OLD -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 ```
 
-Do not use `rm -rf /media/user/OLD/*` for that last step: the glob silently skips dotfiles such as `.config` or `.Trash-1000`.
+Do not use `rm -rf /media/user/OLD/*` — the glob silently skips dotfiles.
 
 ## How it works
 
-1. Runs `rsync -rt --info=name1,progress2 --human-readable --modify-window=1`.
-2. Reads its output byte by byte and splits on `\r` and `\n`. Segments terminated by `\r` are progress updates (`  61%  11.4G  42.7MB/s  0:02:41 (xfr#324, to-chk=188/512)`); segments terminated by `\n` are file names or messages.
-3. File names go to the scroll region, percentages go to the pinned bar.
+- `SCAN` walks the tree, counting bytes and files so the bar has a denominator.
+- `COPY` walks it again, creating directories and copying files in 1 MiB chunks, updating the UI between chunks and polling the keyboard there too — that is why `q` responds within a few milliseconds even in the middle of a 40 GB file.
+- The screen is a `W × H` array of cells (UTF-8 char + RGB). Widgets write into it; `blit()` emits one line per row with absolute positioning and `ESC[K`.
 
-`--modify-window=1` is there because exFAT and FAT store timestamps with 2-second resolution; without it `rsync` thinks freshly copied files changed and re-copies them on every run.
+## Platform notes
 
-Flags are deliberately conservative: `-rt` and no `-a`, since exFAT cannot store Unix permissions or ownership and `-a` only produces noise (`chmod ... failed`). If your destination is ext4 and you want them preserved, pass them through: `cpflow src/ dst/ -- -a`.
-
-## Notes
-
-- `cpflow` shows you what `rsync` reports; it does not add verification of its own. Use the checksum command above when it matters.
-- The percentage is `rsync`'s own, counted over the bytes it still has to send — so an interrupted-and-resumed copy starts at 0% again for the remaining work.
-- Tested on Linux with `rsync` 3.2.7 and Python 3.10–3.12.
+- Windows 10+ (uses `ENABLE_VIRTUAL_TERMINAL_PROCESSING` for ANSI). Paths go through the wide API, so non-ASCII file names work.
+- macOS: builds with clang, no extra flags.
+- Resizing is handled on every frame; there is no `SIGWINCH` handler to miss.
 
 ## License
 

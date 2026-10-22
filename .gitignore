@@ -1,3 +1,5 @@
-__pycache__/
-*.pyc
-.venv/
+cpflow
+cpflow-static
+dist/
+bin/
+*.o
