@@ -934,6 +934,7 @@ static int excluded(const char *name, char **ex, int nex)
 static int cancelled_poll(void)
 {
     int k;
+    if (!g.tty) return 0;   /* don't eat stdin when piped */
     while ((k = key_read()) != 0) {
         if (k == 27 || k == 'q' || k == 3) {
             g.cancelled = 1;
@@ -955,8 +956,9 @@ static void scan_tree(const char *path)
         if (cancelled_poll()) { free(name); break; }
         if (isdir && !islink) {
             char sub[PATHMAX * 2];
-            snprintf(sub, sizeof sub, "%s/%s", path, name);
-            scan_tree(sub);
+            if (snprintf(sub, sizeof sub, "%s/%s", path, name) < (int)sizeof sub) {
+                scan_tree(sub);
+            }
         } else if (!islink) {
             g.total_bytes += size;
             g.total_files++;
@@ -1060,8 +1062,12 @@ static void copy_tree(const char *src, const char *dst, char **ex, int nex)
         if (g.cancelled || cancelled_poll()) { free(name); break; }
         if (excluded(name, ex, nex)) { free(name); continue; }
 
-        snprintf(sp, sizeof sp, "%s/%s", src, name);
-        snprintf(dp, sizeof dp, "%s/%s", dst, name);
+        if (snprintf(sp, sizeof sp, "%s/%s", src, name) >= (int)sizeof sp ||
+            snprintf(dp, sizeof dp, "%s/%s", dst, name) >= (int)sizeof dp) {
+            g.failed = 1;          /* path too long: refusing to guess */
+            free(name);
+            continue;
+        }
 
         if (islink) {
             char tgt[PATHMAX];
