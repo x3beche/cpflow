@@ -44,6 +44,13 @@ curl -L -o cpflow https://github.com/x3beche/cpflow/releases/latest/download/cpf
 chmod +x cpflow && sudo mv cpflow /usr/local/bin/
 ```
 
+The binaries are not code-signed, so macOS quarantines them after download. Clear the flag once:
+
+```bash
+xattr -d com.apple.quarantine cpflow-macos-arm64   # or -x86_64
+chmod +x cpflow-macos-arm64
+```
+
 | Platform | Asset |
 |---|---|
 | Linux x86_64 | `cpflow-linux-x86_64` |
