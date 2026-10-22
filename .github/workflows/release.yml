@@ -55,27 +55,21 @@ jobs:
           if-no-files-found: error
 
   macos:
-    name: macos (${{ matrix.arch }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-13
-            arch: x86_64
-          - os: macos-14
-            arch: arm64
-    runs-on: ${{ matrix.os }}
+    name: macos (x86_64, arm64)
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-      - name: build
+      - name: build both slices
         run: |
           mkdir -p dist
-          cc -std=c11 -O2 -Wall -Wextra -o dist/cpflow-macos-${{ matrix.arch }} src/cpflow.c
-      - name: smoke tests
-        run: sh tests/smoke.sh dist/cpflow-macos-${{ matrix.arch }}
+          cc -arch arm64  -std=c11 -O2 -Wall -Wextra -o dist/cpflow-macos-arm64  src/cpflow.c
+          cc -arch x86_64 -std=c11 -O2 -Wall -Wextra -o dist/cpflow-macos-x86_64 src/cpflow.c
+          file dist/*
+      - name: smoke tests (native slice)
+        run: sh tests/smoke.sh dist/cpflow-macos-arm64
       - uses: actions/upload-artifact@v4
         with:
-          name: dist-macos-${{ matrix.arch }}
+          name: dist-macos
           path: dist/*
           if-no-files-found: error
 

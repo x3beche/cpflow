@@ -499,7 +499,11 @@ static int fs_meta(const char *path, uint64_t *size, int64_t *mtime_ms)
     struct stat st;
     if (lstat(path, &st) != 0) return -1;
     *size = (uint64_t)st.st_size;
+#if defined(__APPLE__)
+    *mtime_ms = (int64_t)st.st_mtimespec.tv_sec * 1000LL + st.st_mtimespec.tv_nsec / 1000000LL;
+#else
     *mtime_ms = (int64_t)st.st_mtim.tv_sec * 1000LL + st.st_mtim.tv_nsec / 1000000LL;
+#endif
     return 0;
 }
 
