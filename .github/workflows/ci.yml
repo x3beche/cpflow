@@ -6,6 +6,18 @@ on:
   pull_request:
 
 jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: build both slices
+        run: |
+          cc -arch arm64  -std=c11 -O2 -Wall -Wextra -Werror -o cpflow-arm64  src/cpflow.c
+          cc -arch x86_64 -std=c11 -O2 -Wall -Wextra -Werror -o cpflow-x86_64 src/cpflow.c
+          file cpflow-arm64 cpflow-x86_64
+      - name: smoke tests
+        run: sh tests/smoke.sh ./cpflow-arm64
+
   build-and-test:
     runs-on: ubuntu-22.04
     strategy:
