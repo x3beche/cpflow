@@ -10,6 +10,7 @@ fail=0
 
 ok()   { printf '  ok    %s\n' "$1"; }
 bad()  { printf '  FAIL  %s\n' "$1"; fail=$((fail + 1)); }
+num()  { tr -d " "; }
 check(){ if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (got '$2', want '$3')"; fi; }
 
 echo "== cpflow smoke tests: $BIN =="
@@ -30,8 +31,8 @@ ln -s small.txt "$TMP/src/link.txt" 2>/dev/null || true
 check "exit code 0" "$?" "0"
 diff -r "$TMP/src" "$TMP/dst" >/dev/null 2>&1
 check "tree identical (diff -r)" "$?" "0"
-check "empty file copied" "$(wc -c < "$TMP/dst/empty.bin")" "0"
-check "large file size" "$(wc -c < "$TMP/dst/big.bin")" "3072000"
+check "empty file copied" "$(wc -c < "$TMP/dst/empty.bin" | num)" "0"
+check "large file size" "$(wc -c < "$TMP/dst/big.bin" | num)" "3072000"
 check "unicode name" "$(cat "$TMP/dst/Türkçe-çğıöşü.txt")" "tr"
 check "hidden dir" "$(cat "$TMP/dst/.hidden/dotfile")" "dot"
 if [ -L "$TMP/src/link.txt" ]; then
@@ -62,7 +63,7 @@ check "exclude: other files kept" "$(cat "$TMP/dst2/small.txt")" "hello"
 # ----------------------------------------------------------------- dry run --
 rm -rf "$TMP/dst3" && mkdir "$TMP/dst3"
 "$BIN" -n "$TMP/src" "$TMP/dst3" >/dev/null 2>&1
-check "dry run copies nothing" "$(ls -A "$TMP/dst3" | wc -l)" "0"
+check "dry run copies nothing" "$(ls -A "$TMP/dst3" | wc -l | num)" "0"
 
 # ---------------------------------------------------------------- piped mode --
 out=$("$BIN" "$TMP/src" "$TMP/dst" 2>&1)
